@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>卫星通联日志生成器</title>
+    
+    <!-- 引入 Tailwind CSS (用于响应式界面和样式) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 引入 FontAwesome 图标库 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- 引入 Vue 3 (用于数据绑定和交互逻辑) -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+
+    <style>
+        /* 防止 Vue 渲染闪烁 */
+        [v-cloak] { display: none; }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.5s; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans pb-20">
+    
+    <!-- Vue 挂载点 -->
+    <div id="app" v-cloak class="min-h-screen p-4 sm:p-8">
+        <div class="max-w-4xl mx-auto space-y-6">
+            
+            <!-- Header -->
+            <div class="flex items-center gap-3 pb-4 border-b border-gray-200">
+                <i class="fa-solid fa-satellite text-blue-600 text-3xl"></i>
+                <h1 class="text-2xl font-bold text-gray-900">卫星通联日志生成器</h1>
+            </div>
+
+            <!-- 卡片1：台站信息设置 -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="bg-gray-50 px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+                    <i class="fa-solid fa-gear text-gray-500"></i>
+                    <h2 class="text-lg font-semibold text-gray-800">台站信息配置</h2>
+                </div>
+                <div class="p-5">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                            <label class="flex items-center gap-1.5 text-sm font-medium text-gray-600 mb-1.5">
+                                <i class="fa-solid fa-tower-broadcast"></i> 台站呼号 (STATION)
+                            </label>
+                            <input 
+                                type="text" 
+                                v-model="stationInfo.station_callsign" 
+                                @input="toUpperCase('station_callsign')"
+                                class="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase transition-all"
+                                placeholder="例如: B5CRA"
+                            />
+                        </div>
+                        <div>
+                            <label class="flex items-center gap-1.5 text-sm font-medium text-gray-600 mb-1.5">
+                                <i class="fa-solid fa-user-astronaut"></i> 操作员 (OPERATOR)
+                            </label>
+                            <input 
+                                type="text" 
+                                v-model="stationInfo.operator" 
+                                @input="toUpperCase('operator')"
+                                class="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase transition-all"
+                                placeholder="例如: BG7XWF"
+                            />
+                        </div>
+                        <div>
+                            <label class="flex items-center gap-1.5 text-sm font-medium text-gray-600 mb-1.5">
+                                <i class="fa-solid fa-location-dot"></i> 网格 (GRIDSQUARE)
+                            </label>
+                            <input 
+                                type="text" 
+                                v-model="stationInfo.my_gridsquare" 
+                                @input="toUpperCase('my_gridsquare')"
+                                class="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase transition-all"
+                                placeholder="例如: OL99WK"
+                            />
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center justify-between">
+                        <button 
+                            @click="handleSaveSettings"
+                            class="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 px-5 py-2.5 rounded-xl font-medium transition-colors"
+                        >
+                            <i class="fa-solid fa-floppy-disk"></i> 保存台站配置
+                        </button>
+                        <span v-if="saveStatus" class="text-green-600 text-sm font-medium flex items-center gap-1">
+                            <i class="fa-solid fa-check"></i> {{ saveStatus }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 卡片2：通联输入与生成 -->
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                <div class="bg-blue-50/50 px-5 py-4 border-b border-gray-100">
+                    <h2 class="text-lg font-semibold text-blue-900">填写通联信息</h2>
+                </div>
+                
+                <div class="p-5 space-y-6">
+                    
+                    <!-- 卫星选择 -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-3">1. 选择卫星 (自动预置频率)</label>
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <button
+                                v-for="(satData, satName) in SATELLITES" :key="satName"
+                                @click="selectedSat = satName"
+                                :class="['relative p-4 rounded-xl text-center border-2 transition-all duration-200', 
+                                    selectedSat === satName 
+                                    ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold shadow-sm' 
+                                    : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:bg-gray-50'
+                                ]"
+                            >
+                                <div class="text-lg mb-1">{{ satName }}</div>
+                                <div class="text-xs opacity-70 font-mono tracking-tighter">
+                                    TX: {{ satData.freqTx }} <br/> RX: {{ satData.freqRx }}
+                                </div>
+                                <div v-if="selectedSat === satName" class="absolute top-2 right-2 text-blue-500">
+                                    <i class="fa-solid fa-check"></i>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 模式选择 -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-3">2. 通联模式</label>
+                        <div class="flex flex-wrap gap-3">
+                            <button
+                                v-for="mode in availableModes" :key="mode"
+                                @click="selectedMode = mode"
+                                :class="['flex-1 min-w-[80px] py-3 px-4 rounded-xl text-center border-2 font-bold transition-all',
+                                    selectedMode === mode 
+                                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' 
+                                    : 'border-gray-200 bg-white text-gray-600 hover:border-indigo-300'
+                                ]"
+                            >
+                                {{ mode }}
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 时间设置 -->
+                    <div class="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                        <label class="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
+                            <i class="fa-solid fa-clock"></i> 3. 通联时间 (UTC)
+                        </label>
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-4">
+                            <div class="flex bg-gray-200 p-1 rounded-lg w-full sm:w-auto">
+                                <button 
+                                    @click="setTimeMode('auto')"
+                                    :class="['flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-medium transition-colors', 
+                                        timeMode === 'auto' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
+                                    ]"
+                                >
+                                    当前时间
+                                </button>
+                                <button 
+                                    @click="setTimeMode('custom')"
+                                    :class="['flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-medium transition-colors', 
+                                        timeMode === 'custom' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
+                                    ]"
+                                >
+                                    自定义时间
+                                </button>
+                            </div>
+                            
+                            <div v-if="timeMode === 'custom'" class="flex gap-2 w-full sm:w-auto">
+                                <input 
+                                    type="date" 
+                                    v-model="customDate"
+                                    class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
+                                />
+                                <input 
+                                    type="time" 
+                                    v-model="customTime"
+                                    class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 呼号录入 -->
+                    <div>
+                        <label class="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
+                            <i class="fa-solid fa-users"></i> 4. 对方呼号 (使用空格或回车分隔多个呼号)
+                        </label>
+                        <textarea 
+                            v-model="callsInput"
+                            rows="4"
+                            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase text-lg shadow-inner bg-gray-50"
+                            placeholder="例如: JK2XXK BA7LVG BI7MPS"
+                        ></textarea>
+                    </div>
+
+                    <!-- 生成按钮 -->
+                    <button 
+                        @click="generateAndDownload"
+                        class="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-lg py-4 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+                    >
+                        <i class="fa-solid fa-file-export"></i> 一键生成并下载 ADIF 日志
+                    </button>
+                </div>
+            </div>
+
+            <!-- 结果展示 -->
+            <transition name="fade">
+                <div v-if="logResult" class="bg-white rounded-2xl shadow-sm border border-green-200 overflow-hidden mt-6">
+                    <div class="bg-green-50 px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-green-100">
+                        <h2 class="text-lg font-semibold text-green-800 flex items-center gap-2">
+                            <i class="fa-solid fa-check text-green-600"></i> 日志已生成并触发下载
+                        </h2>
+                        <div class="flex items-center gap-2 w-full sm:w-auto">
+                            <button 
+                                @click="handleCopy"
+                                class="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
+                            >
+                                <i class="fa-solid fa-copy"></i> 复制内容
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-0">
+                        <textarea 
+                            readonly
+                            v-model="logResult"
+                            class="w-full h-64 p-5 bg-gray-900 text-green-400 font-mono text-sm focus:outline-none resize-y"
+                        ></textarea>
+                    </div>
+                </div>
+            </transition>
+
+        </div>
+    </div>
+
+    <!-- Vue 应用逻辑 -->
+    <script>
+        const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
+
+        const SATELLITES = {
+            'ARISS': { freqTx: '145.990', freqRx: '437.800', modes: ['FM'] },
+            'AO-123': { freqTx: '145.850', freqRx: '435.500', modes: ['FM'] },
+            'SO-50': { freqTx: '145.850', freqRx: '436.795', modes: ['FM'] },
+            'RS-44': { freqTx: '145.000', freqRx: '435.000', modes: ['SSB', 'CW', 'FT8', 'MFSK', 'SSTV'] }
+        };
+
+        const app = createApp({
+            setup() {
+                // 状态
+                const stationInfo = reactive({
+                    station_callsign: '',
+                    operator: '',
+                    my_gridsquare: ''
+                });
+
+                const selectedSat = ref('ARISS');
+                const selectedMode = ref('FM');
+                
+                const timeMode = ref('auto');
+                const customDate = ref('');
+                const customTime = ref('');
+                
+                const callsInput = ref('');
+                const logResult = ref('');
+                const saveStatus = ref('');
+
+                // 计算属性
+                const availableModes = computed(() => {
+                    return SATELLITES[selectedSat.value].modes;
+                });
+
+                // 监听卫星切换
+                watch(selectedSat, (newSat) => {
+                    const modes = SATELLITES[newSat].modes;
+                    if (!modes.includes(selectedMode.value)) {
+                        selectedMode.value = modes[0];
+                    }
+                });
+
+                // 读取本地存储
+                onMounted(() => {
+                    const savedConfig = localStorage.getItem('sat_station_config');
+                    if (savedConfig) {
+                        try {
+                            const parsed = JSON.parse(savedConfig);
+                            stationInfo.station_callsign = parsed.station_callsign || '';
+                            stationInfo.operator = parsed.operator || '';
+                            stationInfo.my_gridsquare = parsed.my_gridsquare || '';
+                        } catch (e) { }
+                    }
+
+                    const savedTimePrefs = localStorage.getItem('sat_time_prefs');
+                    if (savedTimePrefs) {
+                        try {
+                            const prefs = JSON.parse(savedTimePrefs);
+                            if (prefs.timeMode) timeMode.value = prefs.timeMode;
+                            if (prefs.customDate) customDate.value = prefs.customDate;
+                            if (prefs.customTime) customTime.value = prefs.customTime;
+                        } catch (e) { }
+                    } else {
+                        const now = new Date();
+                        customDate.value = now.toISOString().split('T')[0];
+                        customTime.value = now.toISOString().split('T')[1].substring(0, 5);
+                    }
+                });
+
+                const toUpperCase = (field) => {
+                    stationInfo[field] = stationInfo[field].toUpperCase();
+                };
+
+                const setTimeMode = (mode) => {
+                    timeMode.value = mode;
+                    saveTimePrefs();
+                };
+
+                const handleSaveSettings = () => {
+                    localStorage.setItem('sat_station_config', JSON.stringify(stationInfo));
+                    saveStatus.value = '台站信息已保存！';
+                    setTimeout(() => saveStatus.value = '', 2000);
+                };
+
+                const saveTimePrefs = () => {
+                    localStorage.setItem('sat_time_prefs', JSON.stringify({
+                        timeMode: timeMode.value,
+                        customDate: customDate.value,
+                        customTime: customTime.value
+                    }));
+                };
+
+                const formatAdifField = (name, value) => {
+                    if (!value) return '';
+                    const strVal = String(value).trim();
+                    return `<${name}:${strVal.length}>${strVal}`;
+                };
+
+                // 生成并下载
+                const generateAndDownload = () => {
+                    const calls = callsInput.value.toUpperCase().split(/[ \n,]+/).filter(c => c.trim().length > 0);
+                    if (calls.length === 0) {
+                        alert('请输入至少一个呼号！');
+                        return;
+                    }
+
+                    let qsoDateStr = '';
+                    let timeOnStr = '';
+                    let fileTimestamp = '';
+
+                    const nowUtc = new Date();
+                    const nowUtcDate = nowUtc.toISOString().split('T')[0].replace(/-/g, '');
+                    const nowUtcTime = nowUtc.toISOString().split('T')[1].replace(/:/g, '').substring(0, 6);
+                    fileTimestamp = `${nowUtcDate} ${nowUtcTime}`;
+
+                    if (timeMode.value === 'auto') {
+                        qsoDateStr = nowUtcDate;
+                        timeOnStr = nowUtcTime;
+                    } else {
+                        qsoDateStr = customDate.value ? customDate.value.replace(/-/g, '') : nowUtcDate;
+                        timeOnStr = customTime.value ? (customTime.value.replace(/:/g, '') + '00') : nowUtcTime;
+                    }
+
+                    const satData = SATELLITES[selectedSat.value];
+
+                    const headerLines = [
+                        formatAdifField("CREATED_TIMESTAMP", fileTimestamp),
+                        formatAdifField("PROGRAMID", "WebSatLogger"),
+                        formatAdifField("PROGRAMVERSION", "1.1.0"),
+                        "<EOH>"
+                    ];
+
+                    const records = calls.map(call => {
+                        const fields = [
+                            formatAdifField("CALL", call),
+                            formatAdifField("BAND", "2M"),
+                            formatAdifField("MODE", selectedMode.value),
+                            formatAdifField("QSO_DATE", qsoDateStr),
+                            formatAdifField("TIME_ON", timeOnStr),
+                            formatAdifField("FREQ", satData.freqTx),
+                            formatAdifField("BAND_RX", "70CM"),
+                            formatAdifField("FREQ_RX", satData.freqRx),
+                            formatAdifField("PROP_MODE", "SAT"),
+                            formatAdifField("SAT_NAME", selectedSat.value),
+                            formatAdifField("RST_SENT", "59"), // 预置 59
+                            formatAdifField("RST_RCVD", "59")  // 预置 59
+                        ];
+
+                        if (stationInfo.station_callsign) fields.push(formatAdifField("STATION_CALLSIGN", stationInfo.station_callsign));
+                        if (stationInfo.operator) fields.push(formatAdifField("OPERATOR", stationInfo.operator));
+                        if (stationInfo.my_gridsquare) fields.push(formatAdifField("MY_GRIDSQUARE", stationInfo.my_gridsquare));
+                        
+                        fields.push("<EOR>");
+                        return "   " + fields.join("\n   ");
+                    });
+
+                    const finalAdif = headerLines.join("\n") + "\n\n" + records.join("\n\n") + "\n";
+                    logResult.value = finalAdif;
+                    saveTimePrefs();
+
+                    // 执行下载逻辑
+                    const blob = new Blob([finalAdif], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.download = `sat_log_${qsoDateStr}_${timeOnStr.substring(0, 4)}.adi`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                };
+
+                const handleCopy = () => {
+                    navigator.clipboard.writeText(logResult.value);
+                    alert('日志已复制到剪贴板');
+                };
+
+                return {
+                    SATELLITES,
+                    stationInfo,
+                    selectedSat,
+                    selectedMode,
+                    availableModes,
+                    timeMode,
+                    customDate,
+                    customTime,
+                    callsInput,
+                    logResult,
+                    saveStatus,
+                    toUpperCase,
+                    setTimeMode,
+                    handleSaveSettings,
+                    generateAndDownload,
+                    handleCopy
+                };
+            }
+        });
+
+        app.mount('#app');
+    </script>
+</body>
+</html>
