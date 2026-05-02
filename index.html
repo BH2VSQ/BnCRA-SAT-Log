@@ -2,123 +2,164 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>卫星通联日志生成器</title>
     
-    <!-- 引入 Tailwind CSS (用于响应式界面和样式) -->
+    <!-- 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- 引入 FontAwesome 图标库 -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- 引入 Vue 3 (用于数据绑定和交互逻辑) -->
+    <!-- 引入 Vue 3 -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 
     <style>
         /* 防止 Vue 渲染闪烁 */
         [v-cloak] { display: none; }
-        .fade-enter-active, .fade-leave-active { transition: opacity 0.5s; }
+        
+        /* 渐变过渡 */
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
         .fade-enter-from, .fade-leave-to { opacity: 0; }
+        
+        /* Toast 过渡 */
+        .toast-enter-active, .toast-leave-active { transition: all 0.3s ease; }
+        .toast-enter-from, .toast-leave-to { opacity: 0; transform: translate(-50%, -20px); }
+        
+        /* 底部抽屉/弹窗过渡 */
+        .slide-up-enter-active, .slide-up-leave-active { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); }
+        @media (min-width: 640px) {
+            .slide-up-enter-from, .slide-up-leave-to { transform: scale(0.95); opacity: 0; }
+            .slide-up-enter-active, .slide-up-leave-active { transition: all 0.2s ease-out; }
+        }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800 font-sans pb-20">
+<body class="bg-gray-50 text-gray-800 font-sans pb-20 relative antialiased">
     
     <!-- Vue 挂载点 -->
-    <div id="app" v-cloak class="min-h-screen p-4 sm:p-8">
-        <div class="max-w-4xl mx-auto space-y-6">
+    <div id="app" v-cloak class="min-h-screen p-3 sm:p-8 relative">
+        
+        <!-- 页面提示框 (Toast) -->
+        <transition name="toast">
+            <div v-if="toastMsg" class="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 bg-gray-900/95 backdrop-blur text-white px-5 py-3 rounded-full shadow-lg flex items-center gap-3 text-sm sm:text-base whitespace-nowrap">
+                <i class="fa-solid fa-circle-info text-blue-400"></i>
+                <span class="font-medium">{{ toastMsg }}</span>
+            </div>
+        </transition>
+
+        <div class="max-w-3xl mx-auto space-y-4 sm:space-y-6">
             
-            <!-- Header -->
-            <div class="flex items-center gap-3 pb-4 border-b border-gray-200">
-                <i class="fa-solid fa-satellite text-blue-600 text-3xl"></i>
-                <h1 class="text-2xl font-bold text-gray-900">卫星通联日志生成器</h1>
+            <!-- Header (含设置按钮) -->
+            <div class="flex items-center justify-between pb-3 border-b border-gray-200">
+                <div class="flex items-center gap-2.5 sm:gap-3">
+                    <i class="fa-solid fa-satellite text-blue-600 text-2xl sm:text-3xl"></i>
+                    <h1 class="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">卫星通联日志</h1>
+                </div>
+                <button 
+                    @click="isSettingsOpen = true"
+                    class="p-2 -mr-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors active:scale-95"
+                >
+                    <i class="fa-solid fa-gear text-xl"></i>
+                </button>
             </div>
 
-            <!-- 卡片1：台站信息设置 -->
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div class="bg-gray-50 px-5 py-4 border-b border-gray-100 flex items-center gap-2">
-                    <i class="fa-solid fa-gear text-gray-500"></i>
-                    <h2 class="text-lg font-semibold text-gray-800">台站信息配置</h2>
+            <!-- 台站信息设置弹窗 (移动端底部抽屉，PC端居中弹窗) -->
+            <transition name="fade">
+                <div v-if="isSettingsOpen" class="fixed inset-0 z-40 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm sm:p-4" @click.self="isSettingsOpen = false">
+                    <transition name="slide-up" appear>
+                        <div v-if="isSettingsOpen" class="bg-white w-full sm:w-[480px] rounded-t-3xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                            <!-- 弹窗头部 -->
+                            <div class="px-5 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                                <h2 class="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                                    <i class="fa-solid fa-tower-broadcast text-blue-500"></i> 台站配置
+                                </h2>
+                                <button @click="isSettingsOpen = false" class="text-gray-400 hover:text-gray-700 bg-gray-100 hover:bg-gray-200 w-8 h-8 rounded-full flex items-center justify-center transition-colors">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
+                            </div>
+                            <!-- 弹窗表单内容 -->
+                            <div class="p-5 overflow-y-auto space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                                        台站呼号 (STATION)
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        v-model="stationInfo.station_callsign" 
+                                        @input="toUpperCase('station_callsign')"
+                                        class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase transition-all bg-gray-50 focus:bg-white"
+                                        placeholder="例如: B5CRA"
+                                    />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                                        操作员 (OPERATOR)
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        v-model="stationInfo.operator" 
+                                        @input="toUpperCase('operator')"
+                                        class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase transition-all bg-gray-50 focus:bg-white"
+                                        placeholder="例如: BG7XWF"
+                                    />
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1.5">
+                                        网格 (GRIDSQUARE)
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        v-model="stationInfo.my_gridsquare" 
+                                        @input="toUpperCase('my_gridsquare')"
+                                        class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase transition-all bg-gray-50 focus:bg-white"
+                                        placeholder="例如: OL99WK"
+                                    />
+                                </div>
+                                <!-- 弹窗底部按钮 -->
+                                <div class="pt-4 flex gap-3 pb-safe">
+                                    <button 
+                                        @click="isSettingsOpen = false"
+                                        class="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-medium hover:bg-gray-50 transition-colors"
+                                    >
+                                        取消
+                                    </button>
+                                    <button 
+                                        @click="handleSaveSettings"
+                                        class="flex-1 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 shadow-sm transition-colors"
+                                    >
+                                        保存配置
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </transition>
                 </div>
-                <div class="p-5">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <label class="flex items-center gap-1.5 text-sm font-medium text-gray-600 mb-1.5">
-                                <i class="fa-solid fa-tower-broadcast"></i> 台站呼号 (STATION)
-                            </label>
-                            <input 
-                                type="text" 
-                                v-model="stationInfo.station_callsign" 
-                                @input="toUpperCase('station_callsign')"
-                                class="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase transition-all"
-                                placeholder="例如: B5CRA"
-                            />
-                        </div>
-                        <div>
-                            <label class="flex items-center gap-1.5 text-sm font-medium text-gray-600 mb-1.5">
-                                <i class="fa-solid fa-user-astronaut"></i> 操作员 (OPERATOR)
-                            </label>
-                            <input 
-                                type="text" 
-                                v-model="stationInfo.operator" 
-                                @input="toUpperCase('operator')"
-                                class="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase transition-all"
-                                placeholder="例如: BG7XWF"
-                            />
-                        </div>
-                        <div>
-                            <label class="flex items-center gap-1.5 text-sm font-medium text-gray-600 mb-1.5">
-                                <i class="fa-solid fa-location-dot"></i> 网格 (GRIDSQUARE)
-                            </label>
-                            <input 
-                                type="text" 
-                                v-model="stationInfo.my_gridsquare" 
-                                @input="toUpperCase('my_gridsquare')"
-                                class="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase transition-all"
-                                placeholder="例如: OL99WK"
-                            />
-                        </div>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between">
-                        <button 
-                            @click="handleSaveSettings"
-                            class="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 px-5 py-2.5 rounded-xl font-medium transition-colors"
-                        >
-                            <i class="fa-solid fa-floppy-disk"></i> 保存台站配置
-                        </button>
-                        <span v-if="saveStatus" class="text-green-600 text-sm font-medium flex items-center gap-1">
-                            <i class="fa-solid fa-check"></i> {{ saveStatus }}
-                        </span>
-                    </div>
-                </div>
-            </div>
+            </transition>
 
-            <!-- 卡片2：通联输入与生成 -->
-            <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div class="bg-blue-50/50 px-5 py-4 border-b border-gray-100">
-                    <h2 class="text-lg font-semibold text-blue-900">填写通联信息</h2>
-                </div>
-                
-                <div class="p-5 space-y-6">
+            <!-- 主内容区：通联输入与生成 -->
+            <div class="bg-white sm:rounded-2xl shadow-sm border border-gray-100 overflow-hidden -mx-3 sm:mx-0">
+                <div class="p-4 sm:p-5 space-y-6">
                     
                     <!-- 卫星选择 -->
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-3">1. 选择卫星 (自动预置频率)</label>
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <label class="block text-sm sm:text-base font-semibold text-gray-800 mb-3">1. 选择卫星</label>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
                             <button
                                 v-for="(satData, satName) in SATELLITES" :key="satName"
                                 @click="selectedSat = satName"
-                                :class="['relative p-4 rounded-xl text-center border-2 transition-all duration-200', 
+                                :class="['relative p-3 sm:p-4 rounded-xl text-center border-2 transition-all duration-200 active:scale-[0.98]', 
                                     selectedSat === satName 
                                     ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold shadow-sm' 
-                                    : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:bg-gray-50'
+                                    : 'border-gray-100 bg-gray-50 text-gray-600 hover:border-blue-300'
                                 ]"
                             >
-                                <div class="text-lg mb-1">{{ satName }}</div>
-                                <div class="text-xs opacity-70 font-mono tracking-tighter">
+                                <div class="text-base sm:text-lg mb-1">{{ satName }}</div>
+                                <div class="text-[10px] sm:text-xs opacity-70 font-mono tracking-tighter leading-tight">
                                     TX: {{ satData.freqTx }} <br/> RX: {{ satData.freqRx }}
                                 </div>
-                                <div v-if="selectedSat === satName" class="absolute top-2 right-2 text-blue-500">
-                                    <i class="fa-solid fa-check"></i>
+                                <div v-if="selectedSat === satName" class="absolute top-1.5 right-1.5 sm:top-2 sm:right-2 text-blue-500">
+                                    <i class="fa-solid fa-circle-check text-sm"></i>
                                 </div>
                             </button>
                         </div>
@@ -126,15 +167,15 @@
 
                     <!-- 模式选择 -->
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-3">2. 通联模式</label>
-                        <div class="flex flex-wrap gap-3">
+                        <label class="block text-sm sm:text-base font-semibold text-gray-800 mb-3">2. 通联模式</label>
+                        <div class="flex flex-wrap gap-2.5">
                             <button
                                 v-for="mode in availableModes" :key="mode"
                                 @click="selectedMode = mode"
-                                :class="['flex-1 min-w-[80px] py-3 px-4 rounded-xl text-center border-2 font-bold transition-all',
+                                :class="['flex-1 min-w-[70px] sm:min-w-[80px] py-2.5 px-3 rounded-xl text-center border-2 font-bold transition-all active:scale-[0.98]',
                                     selectedMode === mode 
                                     ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm' 
-                                    : 'border-gray-200 bg-white text-gray-600 hover:border-indigo-300'
+                                    : 'border-gray-100 bg-gray-50 text-gray-600 hover:border-indigo-300'
                                 ]"
                             >
                                 {{ mode }}
@@ -143,40 +184,42 @@
                     </div>
 
                     <!-- 时间设置 -->
-                    <div class="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                        <label class="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
-                            <i class="fa-solid fa-clock"></i> 3. 通联时间 (UTC)
+                    <div class="bg-gray-50/80 rounded-xl p-3 sm:p-4 border border-gray-100">
+                        <label class="flex items-center gap-2 text-sm sm:text-base font-semibold text-gray-800 mb-3">
+                            <i class="fa-regular fa-clock text-gray-500"></i> 3. 通联时间 (UTC)
                         </label>
-                        <div class="flex flex-col sm:flex-row sm:items-center gap-4">
-                            <div class="flex bg-gray-200 p-1 rounded-lg w-full sm:w-auto">
+                        <div class="flex flex-col gap-3">
+                            <!-- 模式切换 -->
+                            <div class="flex bg-gray-200/60 p-1 rounded-lg w-full">
                                 <button 
                                     @click="setTimeMode('auto')"
-                                    :class="['flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-medium transition-colors', 
-                                        timeMode === 'auto' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
+                                    :class="['flex-1 py-2 sm:py-2.5 rounded-md text-sm font-medium transition-colors', 
+                                        timeMode === 'auto' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
                                     ]"
                                 >
-                                    当前时间
+                                    使用当前时间
                                 </button>
                                 <button 
                                     @click="setTimeMode('custom')"
-                                    :class="['flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-medium transition-colors', 
-                                        timeMode === 'custom' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
+                                    :class="['flex-1 py-2 sm:py-2.5 rounded-md text-sm font-medium transition-colors', 
+                                        timeMode === 'custom' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'
                                     ]"
                                 >
                                     自定义时间
                                 </button>
                             </div>
                             
-                            <div v-if="timeMode === 'custom'" class="flex gap-2 w-full sm:w-auto">
+                            <!-- 自定义时间输入框 -->
+                            <div v-if="timeMode === 'custom'" class="flex gap-2 w-full">
                                 <input 
                                     type="date" 
                                     v-model="customDate"
-                                    class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
+                                    class="flex-1 px-3 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
                                 />
                                 <input 
                                     type="time" 
                                     v-model="customTime"
-                                    class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" 
+                                    class="flex-1 px-3 py-2.5 bg-white border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
                                 />
                             </div>
                         </div>
@@ -184,50 +227,47 @@
 
                     <!-- 呼号录入 -->
                     <div>
-                        <label class="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
-                            <i class="fa-solid fa-users"></i> 4. 对方呼号 (使用空格或回车分隔多个呼号)
+                        <label class="flex items-center gap-2 text-sm sm:text-base font-semibold text-gray-800 mb-3">
+                            <i class="fa-solid fa-users text-gray-500"></i> 4. 对方呼号
                         </label>
+                        <p class="text-xs text-gray-500 mb-2">使用空格或回车分隔多个呼号</p>
                         <textarea 
                             v-model="callsInput"
                             rows="4"
-                            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase text-lg shadow-inner bg-gray-50"
-                            placeholder="例如: JK2XXK BA7LVG BI7MPS"
+                            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 uppercase text-lg shadow-inner bg-gray-50 outline-none resize-y"
+                            placeholder="例如: JK2XXK BA7LVG"
                         ></textarea>
                     </div>
 
                     <!-- 生成按钮 -->
                     <button 
                         @click="generateAndDownload"
-                        class="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-lg py-4 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
+                        class="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold text-[17px] py-3.5 sm:py-4 rounded-xl shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] hover:shadow-[0_6px_20px_rgba(37,99,235,0.23)] transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
                     >
-                        <i class="fa-solid fa-file-export"></i> 一键生成并下载 ADIF 日志
+                        <i class="fa-solid fa-download"></i> 自动生成并下载 ADIF
                     </button>
                 </div>
             </div>
 
-            <!-- 结果展示 -->
+            <!-- 结果展示区 -->
             <transition name="fade">
-                <div v-if="logResult" class="bg-white rounded-2xl shadow-sm border border-green-200 overflow-hidden mt-6">
-                    <div class="bg-green-50 px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-green-100">
-                        <h2 class="text-lg font-semibold text-green-800 flex items-center gap-2">
-                            <i class="fa-solid fa-check text-green-600"></i> 日志已生成并触发下载
+                <div v-if="logResult" class="bg-gray-900 sm:rounded-2xl shadow-lg overflow-hidden mt-6 -mx-3 sm:mx-0">
+                    <div class="px-4 py-3 flex items-center justify-between border-b border-gray-700">
+                        <h2 class="text-sm font-medium text-green-400 flex items-center gap-2">
+                            <i class="fa-solid fa-check-circle"></i> 日志代码生成成功
                         </h2>
-                        <div class="flex items-center gap-2 w-full sm:w-auto">
-                            <button 
-                                @click="handleCopy"
-                                class="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
-                            >
-                                <i class="fa-solid fa-copy"></i> 复制内容
-                            </button>
-                        </div>
+                        <button 
+                            @click="handleCopy"
+                            class="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border border-gray-700"
+                        >
+                            <i class="fa-regular fa-copy"></i> 复制全部
+                        </button>
                     </div>
-                    <div class="p-0">
-                        <textarea 
-                            readonly
-                            v-model="logResult"
-                            class="w-full h-64 p-5 bg-gray-900 text-green-400 font-mono text-sm focus:outline-none resize-y"
-                        ></textarea>
-                    </div>
+                    <textarea 
+                        readonly
+                        v-model="logResult"
+                        class="w-full h-48 sm:h-64 p-4 bg-transparent text-green-400/90 font-mono text-xs sm:text-sm focus:outline-none resize-y leading-relaxed"
+                    ></textarea>
                 </div>
             </transition>
 
@@ -248,6 +288,8 @@
         const app = createApp({
             setup() {
                 // 状态
+                const isSettingsOpen = ref(false); // 控制台站设置弹窗的开关
+                
                 const stationInfo = reactive({
                     station_callsign: '',
                     operator: '',
@@ -263,7 +305,16 @@
                 
                 const callsInput = ref('');
                 const logResult = ref('');
-                const saveStatus = ref('');
+                
+                // Toast 提示状态
+                const toastMsg = ref('');
+                let toastTimer = null;
+
+                const showToast = (msg) => {
+                    toastMsg.value = msg;
+                    if (toastTimer) clearTimeout(toastTimer);
+                    toastTimer = setTimeout(() => { toastMsg.value = ''; }, 3000);
+                };
 
                 // 计算属性
                 const availableModes = computed(() => {
@@ -316,8 +367,8 @@
 
                 const handleSaveSettings = () => {
                     localStorage.setItem('sat_station_config', JSON.stringify(stationInfo));
-                    saveStatus.value = '台站信息已保存！';
-                    setTimeout(() => saveStatus.value = '', 2000);
+                    isSettingsOpen.value = false; // 保存后关闭弹窗
+                    showToast('台站配置已保存！');
                 };
 
                 const saveTimePrefs = () => {
@@ -338,7 +389,7 @@
                 const generateAndDownload = () => {
                     const calls = callsInput.value.toUpperCase().split(/[ \n,]+/).filter(c => c.trim().length > 0);
                     if (calls.length === 0) {
-                        alert('请输入至少一个呼号！');
+                        showToast('请输入至少一个呼号！');
                         return;
                     }
 
@@ -364,7 +415,7 @@
                     const headerLines = [
                         formatAdifField("CREATED_TIMESTAMP", fileTimestamp),
                         formatAdifField("PROGRAMID", "WebSatLogger"),
-                        formatAdifField("PROGRAMVERSION", "1.1.0"),
+                        formatAdifField("PROGRAMVERSION", "1.2.0"),
                         "<EOH>"
                     ];
 
@@ -380,8 +431,8 @@
                             formatAdifField("FREQ_RX", satData.freqRx),
                             formatAdifField("PROP_MODE", "SAT"),
                             formatAdifField("SAT_NAME", selectedSat.value),
-                            formatAdifField("RST_SENT", "59"), // 预置 59
-                            formatAdifField("RST_RCVD", "59")  // 预置 59
+                            formatAdifField("RST_SENT", "59"),
+                            formatAdifField("RST_RCVD", "59")
                         ];
 
                         if (stationInfo.station_callsign) fields.push(formatAdifField("STATION_CALLSIGN", stationInfo.station_callsign));
@@ -396,23 +447,44 @@
                     logResult.value = finalAdif;
                     saveTimePrefs();
 
-                    // 执行下载逻辑
-                    const blob = new Blob([finalAdif], { type: 'text/plain' });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.download = `sat_log_${qsoDateStr}_${timeOnStr.substring(0, 4)}.adi`;
-                    document.body.appendChild(link);
-                    link.click();
-                    document.body.removeChild(link);
-                    URL.revokeObjectURL(url);
+                    // 下载逻辑
+                    try {
+                        const blob = new Blob([finalAdif], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `sat_log_${qsoDateStr}_${timeOnStr.substring(0, 4)}.adi`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                        
+                        showToast('日志已生成并触发下载');
+                    } catch (error) {
+                        showToast('下载受限，请点击复制全部');
+                    }
                 };
 
                 const handleCopy = () => {
-                    navigator.clipboard.writeText(logResult.value);
-                    alert('日志已复制到剪贴板');
+                    const textArea = document.createElement("textarea");
+                    textArea.value = logResult.value;
+                    textArea.style.position = "fixed";
+                    textArea.style.top = "-9999px";
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    
+                    try {
+                        document.execCommand('copy');
+                        showToast('日志已成功复制到剪贴板！');
+                    } catch (err) {
+                        showToast('复制失败，请手动全选复制');
+                    }
+                    
+                    document.body.removeChild(textArea);
                 };
 
                 return {
+                    isSettingsOpen,
                     SATELLITES,
                     stationInfo,
                     selectedSat,
@@ -423,7 +495,7 @@
                     customTime,
                     callsInput,
                     logResult,
-                    saveStatus,
+                    toastMsg,
                     toUpperCase,
                     setTimeMode,
                     handleSaveSettings,
